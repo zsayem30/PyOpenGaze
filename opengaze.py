@@ -5,6 +5,7 @@
 #
 # Version 1 (27-Apr-2016)
 
+from email.mime import message
 import os
 import copy
 import time
@@ -27,8 +28,8 @@ from threading import Event, Lock, Thread
 # a TCP/IP socket.
 class OpenGazeTracker:
 
-	def __init__(self, ip='127.0.0.1', port=4242, logfile='default.tsv', \
-		debug=False):
+	def __init__(self, ip='10.0.0.1', port=4242, logfile='default.tsv', \
+		debug=False, callback=None):
 		
 		"""The OpenGazeConnection class communicates to the GazePoint
 		server through a TCP/IP socket. Incoming samples will be written
@@ -63,6 +64,7 @@ class OpenGazeTracker:
 			self._debugcounter = 0
 			self._debugconsolidatefreq = 100
 		
+		self.callback = callback
 		# CONNECTION
 		# Save the ip and port numbers.
 		self.host = ip
@@ -178,8 +180,8 @@ class OpenGazeTracker:
 		# Wait for a bit to allow the Threads to start.
 		time.sleep(0.5)
 		# Enable the tracker to send ALL the things.
-		self.enable_send_counter(True)
-		self.enable_send_cursor(True)
+		# self.enable_send_counter(True)
+		# self.enable_send_cursor(True)
 		self.enable_send_eye_left(True)
 		self.enable_send_eye_right(True)
 		self.enable_send_pog_best(True)
@@ -191,6 +193,8 @@ class OpenGazeTracker:
 		self.enable_send_time(True)
 		self.enable_send_time_tick(True)
 		self.enable_send_user_data(True)
+
+		time.sleep(5)
 		# Reset the user-defined variable.
 		self.user_data("0")
 
@@ -347,9 +351,13 @@ class OpenGazeTracker:
 
 	def _parse_msg(self, xml):
 		
-		e = lxml.etree.fromstring(xml)
-	
-		return (e.tag, e.attrib)
+		try:
+			e = lxml.etree.fromstring(xml)
+			if self.callback:
+				self.callback(e.attrib)
+			return (e.tag, e.attrib)
+		except Exception as e:
+			return None
 	
 	def _process_logging(self):
 		
@@ -385,7 +393,6 @@ class OpenGazeTracker:
 		self._debug_print("Incoming Thread started.")
 		
 		while self._connected.is_set():
-
 			# Lock the socket to prevent other Threads from simultaneously
 			# accessing it.
 			self._socklock.acquire()
@@ -408,7 +415,22 @@ class OpenGazeTracker:
 			self._debug_print("Raw instring: %r" % (instring))
 
 			# Split the messages (they are separated by '\r\n').
-			messages = instring.split('\r\n')
+			messages = instring.split(b'\r\n')
+			message = messages[0].decode('utf-8')
+
+			if '/><' in message:
+				l = message.split('/><')
+				for i, s in enumerate(l):
+					if i == 0:
+						self._parse_msg(s + '/>')
+					elif i == len(l)-1:
+						self._parse_msg('<' + s)
+					else:
+						self._parse_msg('<' + s + '/>')
+
+			# print(instring)
+			# print()
+			# self._parse_msg(message)
 
 			# Check if there is currently an unfinished message.
 			if self._unfinished:
@@ -489,7 +511,7 @@ class OpenGazeTracker:
 			self._socklock.acquire()
 			# Send the command to the OpenGaze Server.
 			t = time.time()
-			self._sock.send(msg)
+			self._sock.send(str.encode(msg))
 			# Unlock the socket again.
 			self._socklock.release()
 			
@@ -506,6 +528,7 @@ class OpenGazeTracker:
 		
 		# Format a message in an XML format that the Open Gaze API needs.
 		msg = self._format_msg(command, ID, values=values)
+		print(msg)
 
 		# Run until the message is acknowledged or a timeout occurs (or
 		# break if we're not supposed to wait for an acknowledgement.)
@@ -561,7 +584,6 @@ class OpenGazeTracker:
 			# the while loop.
 			else:
 				break
-		
 		return acknowledged, timeout
 	
 
