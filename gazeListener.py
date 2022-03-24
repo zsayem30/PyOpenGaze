@@ -4,71 +4,50 @@ import xml.etree.ElementTree as ET
 import json
 import re
 import lxml
-from std_msgs.msg import String
 from opengaze import OpenGazeTracker
+from std_msgs.msg import String, Float64MultiArray
+import rospy
+import numpy as np
 
-from std_msgs.msg import String
- 
 
-class EyeGazeListner():
+
+class EyeGazeListener():
 
     # Construct the path to the log file.
     DIRNAME = os.path.dirname(os.path.abspath(__file__))
     FNAME = os.path.join(DIRNAME, '%s.tsv' % (time.strftime("%Y-%m-%d_%H-%M-%S")))
 
     def __init__(self):
+        
         self.tracker = OpenGazeTracker(logfile=self.FNAME, debug=False, callback=self.onMessage)
         time.sleep(1.0)
+        self.pub = rospy.Publisher('gazeTracker', Float64MultiArray, queue_size = 10)
+        rospy.init_node('talker', anonymous=True)
+        self.rate = rospy.Rate(50) # 50hz
+        self.gaze_list = ['TIME', 'LPOGX', 'LPOGY', 'LPOGV', 'RPOGX', 'RPOGY', 'RPOGV', 'BPOGX', 'BPOGY', 'BPOGV']
 
-        # CALIBRATION
-        # # Reset the calibration to its default points.
-        # tracker.calibrate_reset()
-        # # Start the calibration.
-        # tracker.calibrate_start(True)positionalon_result()
-        # 	time.sleep(0.1)
-
-        # Start the streaming of data.
         self.tracker.start_recording()
 
-        # Stop the streaming of data.
-        self.tracker.stop_recording()
-
-        # Close the connection.
-        self.tracker.close()
-
+    def talker(self, data):
+        rospy.loginfo(data)
+        self.pub.publish(data)
+        self.rate.sleep()
 
     def onMessage(self, e):
-        # print(type(e))
-
-        
-        # print(type(e.get("CNT")))
-    
-        # print(e.keys())
 
         self.data = e
-    
-        # print(self.data['CNT'])
-        # print(json.dumps(self.data, sort_keys=True, indent=4))
+        gaze_array = []
+        for key in self.gaze_list:
+            gaze_array.append(np.nan if self.data[key] == 'nan' else float(self.data[key]))
 
-   
-    def getEyeGaze(self):
-
-        return self.data
-        
-    # def getCount(self):
-
-    #     try:
-    #         return self.data["CNT"]
-
-    #     except Exception as e:
-            
-    #         return None
-
-
+        Gaze_data = Float64MultiArray()
+        Gaze_data.data = gaze_array
+        self.talker(Gaze_data)    
 
 def main():
-    egl = EyeGazeListner()
-    # print(egl.getEyeGaze())
+
+    egl = EyeGazeListener()
+
 
 if __name__=="__main__":
     main()

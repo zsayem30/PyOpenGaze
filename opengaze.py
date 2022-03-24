@@ -47,7 +47,6 @@ class OpenGazeTracker:
 		logfile	-	The path to the intended log file, including a
 					file extension ('.tsv'). Type: str. Default = 
 					'default.tsv'
-
 		debug	-	Boolean that determines whether DEBUG mode should be
 				active (True) or not (False). In DEBUG mode, all sent
 				and received messages are logged to a file. Type: bool.
